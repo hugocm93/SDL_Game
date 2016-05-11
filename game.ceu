@@ -1,19 +1,18 @@
 #include "sdl.ceu"
 
-
 input void SDL_REDRAW;
 input void SDL_QUIT;
 input int  SDL_DT;
 input _SDL_KeyboardEvent&& SDL_KEYDOWN;
-input _SDL_KeyboardEvent&& SDL_KEYUP;
-input _SDL_MouseButtonEvent&& SDL_MOUSEBUTTONDOWN;
+
+_srand(_time(null));
 
 var _SDL_Window&? window;
     finalize
-        window = &_SDL_CreateWindow("Jogo",
+        window = &_SDL_CreateWindow("Race",
                     _SDL_WINDOWPOS_UNDEFINED,
                     _SDL_WINDOWPOS_UNDEFINED,
-                    640, 480, _SDL_WINDOW_SHOWN);
+                    480, 640, _SDL_WINDOW_SHOWN);
     with
         _SDL_DestroyWindow(&&window!);
     end
@@ -26,61 +25,62 @@ var _SDL_Renderer&? renderer;
     end
 
 native do
-    SDL_Renderer* REN = NULL;
-    ##define ID(x) x
-end
-native @pure _ID();
-
-finalize
-    _REN = _SDL_CreateRenderer(&&window!, -1, 0);
-with
-    _SDL_DestroyRenderer(_REN);
-end
-
-native do
-    SDL_Texture* TEX_UP;
+    SDL_Texture* TEX;
 end
     finalize
-        _TEX_UP = _IMG_LoadTexture(_REN, "up.png");
+        _TEX = _IMG_LoadTexture(&&renderer!, "car.png");
     with
-        _SDL_DestroyTexture(_TEX_UP);
+        _SDL_DestroyTexture(_TEX);
     end
 
-class Projectile with
+var int score = 0;
+
+class PairOfCars with
     var _SDL_Renderer& ren;
     var _SDL_Rect r;
-    var int speed;
+    var _SDL_Rect l;
+    var bool left; 
+    var bool right;
+    var int delta;
     event void go_collide;
 do
-    this.r.x = 200;
-    this.r.y = 200;
-    this.r.w = 50;
-    this.r.h = 45;
 
-	par/or do
- 	     par do
-                var int y = r.y;
-                loop do
-                    var int dt = await SDL_DT;
-                    var float v = dt*speed;
-                    y = y + v/1000;
-                    r.y = y;
-                    if r.y < 0 then
-                        escape false;
-                    end
-                end
-            with
-                await this.go_collide;
-                escape true;
-            end;
-	with
-		every SDL_REDRAW do
-		   //_SDL_RenderCopy(&&this.ren, _TEX_UP, null, &&this.r);
- 		   _SDL_SetRenderDrawColor(&&this.ren,0xDD,0xDD,0xDD,0x00);
-		   _SDL_RenderFillRect(&&this.ren, &&this.r);
+    r.x = 295;
+    r.y = -200;
+    r.w = 75;
+    r.h = 100;
 
+    l.x = 110;
+    l.y = -200;
+    l.w = 75;
+    l.h = 100;
+
+    par/or do
+		every dt in SDL_DT do
+			r.y = r.y + delta;	
+			l.y = l.y + delta;
 		end
+
+    with
+	every SDL_REDRAW do
+
+		if left == true then
+ 			_SDL_RenderCopy(&&this.ren, _TEX, null, &&this.l);
+                end
+
+ 		if left == false then
+	        	l.x = -10000;
+                end
+			
+		if right == true then
+	            	_SDL_RenderCopy(&&this.ren, _TEX, null, &&this.r);
+                end
+
+		if right == false then
+	        	r.x = -10000;
+                end
 	end
+    end
 end
 
 class Cloud with
@@ -98,8 +98,7 @@ do
         end
     with
         every SDL_REDRAW do
-            _SDL_SetRenderDrawColor(&&this.ren,
-                                    0xDD,0xDD,0xDD,0x00);
+            _SDL_SetRenderDrawColor(&&this.ren, 0x68,0xCA,0xD9,0x00);
             this.r.x = x / 1000;
             _SDL_RenderFillRect(&&this.ren, &&this.r);
         end
@@ -108,60 +107,52 @@ end
 
 class Player with
     var _SDL_Renderer& ren;
+    var _SDL_Rect      r;
+    var bool left;
 do
-    var int x = (640/2 - 20/2) * 1000;
-    var int y = (480-50) * 1000;
-    var int vx = 0;
-    var int vy = 0;
+    left = true;
 
-    var _SDL_Rect r;
     r.x = 0;
-    r.y = 0;
-    r.w = 20;
-    r.h = 50;
+    r.y = 390;
+    r.w = 75;
+    r.h = 100;
 
     par do
         every dt in SDL_DT do
-            x = x + vx*dt;
-            y = y + vy*dt;
+            if left == true then
+		r.x = 110;
+            end
+
+            if left == false then
+		r.x = 295;
+            end
         end
     with
         par do
             loop do
                 var _SDL_KeyboardEvent&& key;
                 key = await SDL_KEYDOWN until key:keysym.sym==_SDLK_LEFT;
-                vx = -100;
-                key = await SDL_KEYUP   until key:keysym.sym==_SDLK_LEFT;
-                vx = 0;
+                left = true;
             end
         with
             loop do
                 var _SDL_KeyboardEvent&& key;
                 key = await SDL_KEYDOWN until key:keysym.sym==_SDLK_RIGHT;
-                vx = 100;
-                key = await SDL_KEYUP   until key:keysym.sym==_SDLK_RIGHT;
-                vx = 0;
+                left = false;
             end
         end
     with
         every SDL_REDRAW do
-            _SDL_SetRenderDrawColor(&&this.ren,
-                                    0x00,0x00,0x00,0x00);
-            r.x = x / 1000;
-            r.y = y / 1000;
-            _SDL_RenderFillRect(&&this.ren, &&r);
+ 	_SDL_RenderCopy(&&this.ren, _TEX, null, &&this.r);
         end
     end
 end
-
-_srand(_time(null));
 
 par/or do
     await SDL_QUIT;
 with
     every SDL_REDRAW do
-        _SDL_SetRenderDrawColor(&&renderer!,
-                                0x00,0xF0,0xE4,0x00);
+        _SDL_SetRenderDrawColor(&&renderer!, 0x7A,0xE6,0xB0,0x00);
         _SDL_RenderFillRect(&&renderer!, null);
     end
 with
@@ -178,16 +169,74 @@ with
 
     end;
 
-    var Projectile pro with
-       this.ren = &renderer!;
-       this.speed = 10;
-    end;
-
-    var Player p with
-        this.ren = &renderer!;
-    end;
-
     await FOREVER;
+
+with
+
+	pool PairOfCars[] cars;
+
+	pool Player[1] player;
+
+	spawn Player in player with
+	    this.ren = &renderer!;
+	    this.r.x = 0;
+	    this.r.y = 390;
+	    this.r.w = 75;
+	    this.r.h = 100;
+	end;
+
+	par do
+		var int delta = 8;
+		var int time = 2000;
+
+		every (time)ms do
+			var bool left = false;
+			var bool right = false;
+
+			 if  _rand()%2 == 0 then
+			 	left = true;
+			 end
+
+			 if  _rand()%2 == 0 then
+				if left == false then
+					right = true;
+				end
+			end
+
+			spawn PairOfCars in cars with
+				this.ren = &renderer!;
+				this.left = left;
+				this.right = right;
+				this.delta = delta;
+			end;
+
+			score = score + 1;
+			time = time - 20;
+		end
+	with
+		every SDL_DT do
+		    var PairOfCars&&?[] tocol;
+		    loop p1 in cars do
+		       loop pl1 in player do
+		            if _SDL_HasIntersection(&&p1:l,&&pl1:r) then
+		                tocol = []..tocol..[p1];
+		            end
+ 			    if _SDL_HasIntersection(&&p1:r,&&pl1:r) then
+		                tocol = []..tocol..[p1];
+		            end
+			end
+		       
+		    end
+		    loop i in $tocol do
+		        if tocol[i]? then
+		            emit tocol[i]!:go_collide;
+			    _printf("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n*********Score: %d*********\n", score);
+			    _exit(1);
+		        end
+		    end
+		end
+	end
+
 with
     every SDL_REDRAW do
         _SDL_RenderPresent(&&renderer!);
